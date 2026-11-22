@@ -64,6 +64,10 @@ DWORD toWinProt(uint32_t f){
     return PAGE_NOACCESS;
 }
 
+void host_print(int x){
+    cout<< dec <<"Guest says: " << x  << "\n";
+}
+
 string flagsStr(uint32_t f){
     string s;
     s += (f & 4) ? 'R' : '-';
@@ -190,9 +194,9 @@ int main(int argc, char* argv[]){
     cout << "Entry: vaddr=0x" << h.e_entry << " -> real=0x" << (base + h.e_entry) << "\n";
 
     if(run){
-        using EntryFn = int(*)();
+        using EntryFn = int(*)(void(*)(int));
         EntryFn fn = reinterpret_cast<EntryFn>(base + h.e_entry);
-        int r = fn();
+        int r = fn(host_print);
         cout<<dec<<"Guest code returned: " << r << "\n";
     }
     VirtualFree(mem, 0, MEM_RELEASE);
