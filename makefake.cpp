@@ -30,9 +30,35 @@ struct Elf64_Phdr {
     uint64_t p_memsz;
     uint64_t p_align;
 };
+
+struct ImportEntry {
+    uint64_t slot_vaddr;
+    char name[32];
+}
 #pragma pack(pop)
 
 int main() {
+    const uint64_t BASE = 0x400000;
+    
+    // 3. Programul: mov eax, 42 ; ret
+    uint8_t code[] = {
+        0x48, 0x83, 0xEC, 0x28,                    // sub rsp, 40
+        0xB9, 0x2A, 0x00, 0x00, 0x00,              // mov ecx, 42
+        0xFF, 0x15, 0x15, 0x00, 0x00, 0x00,        // call [rip+21]  -> slot
+        0xB9, 0x64, 0x00, 0x00, 0x00,              // mov ecx, 100
+        0xFF, 0x15, 0x0A, 0x00, 0x00, 0x00,        // call [rip+10]  -> slot
+        0x48, 0x83, 0xC4, 0x28,                    // add rsp, 40
+        0xB8, 0x07, 0x00, 0x00, 0x00,              // mov eax, 7
+        0xC3                                       // ret
+    };
+
+    uint8_t slot[8] = {};
+
+    const uint64_t codeOff = sizeof(Elf64_Ehdr) + 2 * sizeof(Elf64_Phdr); // 176
+    const uint64_t slotOff = codeOff + sizeof(code); // 176 + 36 = 212
+    const uint64_t importOff = slotOff + sizeof(slot); // 212 + 8 = 220
+    const uint64_t total = importOff + sizeof(ImportEntry); // 220 + 8 + 32 = 260
+
     // 1. Headerul ELF (cartea de identitate)
     Elf64_Ehdr h{};
     h.e_ident[0] = 0x7F; h.e_ident[1] = 'E'; h.e_ident[2] = 'L'; h.e_ident[3] = 'F';
@@ -50,22 +76,34 @@ int main() {
     h.e_shentsize = 64;
 
     // 2. Un singur program header: "incarca tot fisierul la 0x400000"
-    Elf64_Phdr p{};
-    p.p_type   = 1;         // PT_LOAD
-    p.p_flags  = 5;         // R + X
-    p.p_offset = 0;
-    p.p_vaddr  = 0x400000;
-    p.p_paddr  = 0x400000;
-    p.p_filesz = 126;
-    p.p_memsz  = 126;
-    p.p_align  = 0x1000;
+    Elf64_Phdr load{};
+    load.p_type   = 1;         // PT_LOAD
+    load.p_flags  = 5;         // R + X
+    load.p_offset = 0;
+    load.p_vaddr  = BASE;
+    load.p_paddr  = BASE;
+    load.p_filesz = total;
+    load.p_memsz  = total;
+    load.p_align  = 0x1000;
 
-    // 3. Programul: mov eax, 42 ; ret
-    uint8_t code[] = { 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
+    Elf64_Phdr imp{};
+    imp.p_type = 0x61000001;
+    imp.p_flags = 4;
+    imp.p_offset = importOff;
+    imp.p_filesz = sizeof(ImportEntry);
+    imp.p_memsz = sizeof(ImportEntry);
+    imp.p_align = 1;
+
+    ImportEntry e{};
+    e.slot_vaddr = BASE + slotOff;
+    strncpy(e.name, "print_int", sizeof(e.name) - 1);
 
     ofstream f("fake.elf", ios::binary);
     f.write(reinterpret_cast<char*>(&h), sizeof(h));
-    f.write(reinterpret_cast<char*>(&p), sizeof(p));
+    f.write(reinterpret_cast<char*>(&load), sizeof(load));
+    f.write(reinterpret_cast<char*>(&imp), sizeof(imp));
     f.write(reinterpret_cast<char*>(code), sizeof(code));
+    f.write(reinterpret_cast<char*>(slot), sizeof(slot));
+    f.write(reinterpret_cast<char*>(&e), sizeof(e));
     return 0;
 }

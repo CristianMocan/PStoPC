@@ -5,6 +5,8 @@
 #include <cstring>
 #include <array>
 #include <windows.h>
+#include <map>
+#include <string>
 using namespace std;
 #pragma pack(push, 1)
 struct Elf64_Ehdr{
@@ -34,11 +36,16 @@ struct Elf64_Phdr {
     uint64_t p_memsz;
     uint64_t p_align;
 };
+
+struct ImportEntry {
+    uint64_t slot_vaddr;
+    char     name[32];
+};
 #pragma pack(pop)
 
 const uint32_t PT_LOAD = 1;
 const uint64_t PAGE = 0x1000;
-
+const uint32_t PT_IMPORTS = 0x61000001;
 uint64_t alignDown(uint64_t v){
     return v & ~(PAGE - 1);
 }
@@ -187,9 +194,9 @@ int main(int argc, char* argv[]){
             entryOk = true;
         }
     }
-    if (!entryOk) { 
-        cerr << "Error: entry point not inside an executable segment\n"; 
-        return 1; 
+    if (!entryOk) {
+        cerr << "Error: entry point not inside an executable segment\n";
+        return 1;
     }
     cout << "Entry: vaddr=0x" << h.e_entry << " -> real=0x" << (base + h.e_entry) << "\n";
 
